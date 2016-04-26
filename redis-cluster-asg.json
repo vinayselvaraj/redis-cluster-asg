@@ -107,7 +107,7 @@
                   "HOME=/\n",
                   "SQS_QUEUE_URL=", { "Ref" : "ASGLCQueue"}, "\n",
                   "AWS_REGION=", { "Ref" : "AWS::Region"}, "\n",
-                  "* * * * * root sleep `/usr/bin/expr $RANDOM \\% 59`; /usr/local/bin/redis-asg-lc-agent.py >& | logger -t redis-asg-lc-agent  \n"
+                  "* * * * * root sleep `/usr/bin/expr $RANDOM \\% 59`; /usr/local/bin/redis-asg-lc-agent.py \n"
                 ]]},
                 "mode"  : "000644",
                 "owner" : "root",
