@@ -4,7 +4,6 @@ import boto3
 import json
 import os
 import subprocess
-import syslog
 
 queue_url  = os.environ['SQS_QUEUE_URL']
 aws_region = os.environ['AWS_REGION']
@@ -18,7 +17,7 @@ ec2   = boto3.client('ec2')
 def delete_message(message):
     message_id     = message['MessageId']
     receipt_handle = message['ReceiptHandle']
-    syslog.syslog("Deleting message id=%s" % message_id)
+    print("Deleting message id=%s" % message_id)
     
     sqs.delete_message(
         QueueUrl = queue_url,
@@ -26,7 +25,7 @@ def delete_message(message):
     )
 
 def create_cluster(asg_name, num_replicas, redis_port):
-    syslog.syslog("Creating cluster")
+    print("Creating cluster")
     
     instance_ids = []
     
@@ -38,6 +37,7 @@ def create_cluster(asg_name, num_replicas, redis_port):
     )
     asg_group = desc_asg_resp['AutoScalingGroups'][0]
     instances = asg_group['Instances']
+    print instances
     
     # Get instance ID of each instance
     for instance in instances:
@@ -64,7 +64,7 @@ def create_cluster(asg_name, num_replicas, redis_port):
         cmd = cmd + instance_ip + ":" + str(redis_port) + " "
     cmd = cmd + " </tmp/yes"
     
-    syslog.syslog("Command: " + cmd)
+    print("Command: " + cmd)
     
     # Create 'yes' file
     f = open('/tmp/yes', 'w+')
@@ -90,24 +90,24 @@ def handle_message(message):
     redis_port    = body.get('RedisPort')
     
     if event == 'autoscaling:TEST_NOTIFICATION':
-        syslog.syslog("Removing test notification")
+        print("Removing test notification")
         delete_message(message)
         return
     
     if event == 'CLUSTER_CREATE':
-        syslog.syslog("Received CLUSTER_CREATE")
+        print("Received CLUSTER_CREATE")
         create_cluster(asg_name, num_replicas, redis_port)
         delete_message(message)
     
     if lc_transition == 'autoscaling:EC2_INSTANCE_TERMINATING':
-        syslog.syslog("terminated")
+        print("terminated")
     
     if lc_transition == 'autoscaling:EC2_INSTANCE_LAUNCHING':
-        syslog.syslog("launching")
+        print("launching")
 
 def main():
     
-    syslog.syslog("--- Polling for messages ---")
+    print("--- Polling for messages ---")
     messages = sqs.receive_message(
                                 QueueUrl            = queue_url,
                                 MaxNumberOfMessages = 10,
@@ -118,7 +118,7 @@ def main():
             for message in messages['Messages']:
                  handle_message(message)
         except Exception as e:
-            syslog.syslog("Caught exception while processing message: ", e)
+            print("Caught exception while processing message: ", e)
 
 if __name__ == "__main__":
     main()
