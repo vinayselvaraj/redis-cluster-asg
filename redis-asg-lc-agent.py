@@ -107,7 +107,7 @@ def handle_message(message):
 
 def main():
     
-    print("--- Polling for messages ---")
+    print("Polling for messages")
     messages = sqs.receive_message(
                                 QueueUrl            = queue_url,
                                 MaxNumberOfMessages = 10,
