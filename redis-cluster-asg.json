@@ -36,6 +36,18 @@
       "Description" : "Maximum # of EC2 hosts in the Redis Cluster",
       "Type" : "Number",
       "Default" : "10"
+    },
+    
+    "NumReplicas" : {
+      "Description" : "Number of replicas per master",
+      "Type" : "Number",
+      "Default" : "0"
+    },
+    
+    "RedisPort" : {
+      "Description" : "RedisPort",
+      "Type" : "Number",
+      "Default" : "6379"
     }
     
   },
@@ -70,6 +82,19 @@
                 }
               }
             },
+            "packages" : {
+              "rubygems" : {
+                "redis" : []
+              }
+            },
+            "files" : {
+              "/usr/local/bin/redis-trib.rb" : {
+                "source" : "http://download.redis.io/redis-stable/src/redis-trib.rb",
+                "mode"  : "000755",
+                "owner" : "root",
+                "group" : "root"
+              }
+            },
             "commands" : {
               "01_installRemiRepository" : {
                 "command" : "rpm -Uvhf http://rpms.remirepo.net/enterprise/remi-release-6.rpm"
@@ -88,6 +113,9 @@
               },
               "06_bindAllIPs" : {
                 "command" : "sed -i 's/bind 127.0.0.1/#bind 127.0.0.1/g' /etc/redis.conf"
+              },
+              "07_installBoto3" : {
+                "command" : "pip install boto3"
               }
             }
           }
@@ -171,7 +199,7 @@
       "Type": "AWS::Lambda::Function",
       "Properties": {
         "Code": {
-          "ZipFile":  { "Fn::Join": ["\n", [
+          "ZipFile":  { "Fn::Join": ["", [
             "var response = require('cfn-response');",
             "exports.handler = function(event, context) {",
             "    console.log('REQUEST RECEIVED:\\n', JSON.stringify(event));",
@@ -186,7 +214,7 @@
             "      if (sqsQueueUrl) {",
             "        var aws = require('aws-sdk');",
             "        var sqs = new aws.SQS({params: {QueueUrl: sqsQueueUrl}});",
-            "        var messageBody = {event: 'CLUSTER_CREATE'};",
+            "        var messageBody = {Event: 'CLUSTER_CREATE', RedisPort: '", {"Ref" : "RedisPort"} ,"', NumReplicas: '", {"Ref" : "NumReplicas"} ,"', AutoScalingGroupName: '", {"Ref" : "AutoScalingGroup"} ,"'};",
             "        sqs.sendMessage({MessageBody: JSON.stringify(messageBody)}, function (err, data) {",
             "          if (err) {",
             "            responseData = {Error: 'sendMessage call failed'};",
@@ -322,9 +350,20 @@
                   "ecr:GetAuthorizationToken",
                   "ecr:BatchCheckLayerAvailability",
                   "ecr:GetDownloadUrlForLayer",
-                  "ecr:BatchGetImage"
+                  "ecr:BatchGetImage",
+                  "sqs:ReceiveMessage"
                 ],
                 "Resource":"*"
+              },
+              {
+                "Effect": "Allow",
+                "Action": ["ec2:DescribeInstances"],
+                "Resource": "*"
+              },
+              {
+                "Effect": "Allow",
+                "Action": ["autoscaling:DescribeAutoScalingGroups"],
+                "Resource": "*"
               },
               {
                 "Effect":"Deny",

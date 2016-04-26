@@ -3,11 +3,16 @@
 import boto3
 import json
 import os
+import subprocess
 
 queue_url  = os.environ['SQS_QUEUE_URL']
 aws_region = os.environ['AWS_REGION']
 
+boto3.setup_default_session(region_name=aws_region)
+
 sqs   = boto3.client('sqs')
+asg   = boto3.client('autoscaling')
+ec2   = boto3.client('ec2')
 
 def delete_message(message):
     message_id     = message['MessageId']
@@ -19,12 +24,71 @@ def delete_message(message):
         ReceiptHandle = receipt_handle
     )
 
+def create_cluster(asg_name, num_replicas, redis_port):
+    print "Creating cluster"
+    
+    instance_ids = []
+    
+    # Describe ASG to get list of instance IDS
+    desc_asg_resp = asg.describe_auto_scaling_groups(
+        AutoScalingGroupNames=[
+            asg_name
+        ]
+    )
+    asg_group = desc_asg_resp['AutoScalingGroups'][0]
+    instances = asg_group['Instances']
+    
+    # Get instance ID of each instance
+    for instance in instances:
+        instance_ids.append(instance['InstanceId'])
+    
+    # Check if number of instances meets desired count
+    desired_count = asg_group['DesiredCapacity']
+    if len(instance_ids) != desired_count:
+        raise Exception("Number of instances does not meet desired count")
+    
+    # Describe instances to find IP of each instance
+    desc_inst_resp = ec2.describe_instances(
+        InstanceIds=instance_ids
+    )
+    
+    instance_ips = []
+    
+    reservations = desc_inst_resp['Reservations']
+    for reservation in reservations:
+        instance_ips.append(reservation['Instances'][0]['PrivateIpAddress'])
+    
+    cmd = "/usr/local/bin/redis-trib.rb create --replicas " + str(num_replicas) + " "
+    for instance_ip in instance_ips:
+        cmd = cmd + instance_ip + ":" + str(redis_port) + " "
+    cmd = cmd + " </tmp/yes"
+    
+    print "Command: " + cmd
+    
+    # Create 'yes' file
+    f = open('/tmp/yes', 'w+')
+    f.write('yes')
+    f.close()
+    
+    # Run the redis-trib.rb create command
+    subprocess.check_call(cmd, shell=True)    
+    
+    #/usr/local/bin/redis-trib.rb create --replicas 0 172.31.6.212:6379 172.31.49.228:6379 172.31.19.183:6379 < yes
+
 def handle_message(message):
     body = json.loads(message['Body'].encode("ascii"))
     
     print body
     
-    event  = body.get('Event')
+    event         = body.get('Event')
+    asg_name      = body.get('AutoScalingGroupName')
+    instance_id   = body.get('EC2InstanceId')
+    lc_token      = body.get('LifecycleActionToken')
+    lc_hook       = body.get('LifecycleHookName')
+    lc_transition = body.get('LifecycleTransition')
+    
+    num_replicas  = body.get('NumReplicas')
+    redis_port    = body.get('RedisPort')
     
     if event == 'autoscaling:TEST_NOTIFICATION':
         print "Removing test notification"
@@ -33,23 +97,21 @@ def handle_message(message):
     
     if event == 'CLUSTER_CREATE':
         print "Received CLUSTER_CREATE"
-        return
-    
-    instance_id   = body.get('EC2InstanceId')
-    asg_name      = body.get('AutoScalingGroupName')
-    lc_token      = body.get('LifecycleActionToken')
-    lc_hook       = body.get('LifecycleHookName')
-    lc_transition = body.get('LifecycleTransition')
+        create_cluster(asg_name, num_replicas, redis_port)
+
     
     if lc_transition == 'autoscaling:EC2_INSTANCE_TERMINATING':
         print "terminated"
     
     if lc_transition == 'autoscaling:EC2_INSTANCE_LAUNCHING':
         print "launching"
-    
+
     
 
 def main():
+    
+    #create_cluster('redis-cluster-11-AutoScalingGroup-13PRGAKXKXR9M', 0, 6379)
+    #return
     
     while(True):
         print "--- Polling for messages ---"
@@ -61,8 +123,8 @@ def main():
         if messages and messages.get('Messages'):
             try:
                 handle_message(messages['Messages'][0])
-            except:
-                print "Unable to handle message"
+            except Exception as e:
+                print "Caught exception while processing message: ", e
 
 if __name__ == "__main__":
     main()
