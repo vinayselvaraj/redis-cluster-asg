@@ -136,6 +136,91 @@
       }
     },
     
+    "NotifyClusterCreateLambdaExecRole" : {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [{
+            "Effect": "Allow",
+            "Principal": {"Service": ["lambda.amazonaws.com"]},
+            "Action": ["sts:AssumeRole"]
+          }]
+        },
+        "Path": "/",
+        "Policies": [{
+          "PolicyName": "root",
+          "PolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [{
+              "Effect": "Allow",
+              "Action": ["logs:CreateLogGroup","logs:CreateLogStream","logs:PutLogEvents"],
+              "Resource": "arn:aws:logs:*:*:*"
+            },
+            {
+              "Effect": "Allow",
+              "Action": ["sqs:SendMessage"],
+              "Resource": "*"
+            }]
+          }
+        }]
+      }
+    },
+    
+    "NotifyClusterCreateFunction": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Code": {
+          "ZipFile":  { "Fn::Join": ["\n", [
+            "var response = require('cfn-response');",
+            "exports.handler = function(event, context) {",
+            "    console.log('REQUEST RECEIVED:\\n', JSON.stringify(event));",
+            "    if (event.RequestType == 'Delete') {",
+            "        response.send(event, context, response.SUCCESS);",
+            "        return;",
+            "    }",
+            
+            "    if (event.RequestType == 'Create') {",
+            "      var sqsQueueUrl = event.ResourceProperties.SQSQueue;",
+            "      var responseData = {};",
+            "      if (sqsQueueUrl) {",
+            "        var aws = require('aws-sdk');",
+            "        var sqs = new aws.SQS({params: {QueueUrl: sqsQueueUrl}});",
+            "        var messageBody = {event: 'CLUSTER_CREATE'};",
+            "        sqs.sendMessage({MessageBody: JSON.stringify(messageBody)}, function (err, data) {",
+            "          if (err) {",
+            "            responseData = {Error: 'sendMessage call failed'};",
+            "            console.log(responseData.Error + ':\\n', err);",
+            "            response.send(event, context, response.FAILED, responseData);",
+            "          } else { ",
+            "            responseData = {Message: 'sendMessage call succeeded'};",
+            "            response.send(event, context, response.SUCCESS, responseData);",
+            "          }",
+            "        });",
+            "      } else {",
+            "        responseData = {Error: 'SQS queue url not specified'};",
+            "        console.log(responseData.Error);",
+            "        response.send(event, context, response.FAILED, responseData);",
+            "      }",
+            "    }",
+            "};"
+          ]]}
+        },
+        "Handler": "index.handler",
+        "Runtime": "nodejs",
+        "Timeout": "30",
+        "Role": { "Fn::GetAtt" : ["NotifyClusterCreateLambdaExecRole", "Arn"] }
+      }
+    },
+    
+    "NotifyClusterCreateCustomResource" : {
+      "Type": "Custom::NotifyClusterCreate",
+      "Properties": {
+        "ServiceToken": { "Fn::GetAtt" : ["NotifyClusterCreateFunction", "Arn"] },
+        "SQSQueue": { "Ref": "ASGLCQueue" }
+      }
+    },
+    
     "ScaleDownLCPolicy" : {
       "Type": "AWS::AutoScaling::LifecycleHook",
       "Properties" : {
