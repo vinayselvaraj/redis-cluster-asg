@@ -98,7 +98,7 @@ def handle_message(message):
     if event == 'CLUSTER_CREATE':
         print "Received CLUSTER_CREATE"
         create_cluster(asg_name, num_replicas, redis_port)
-
+        delete_message(message)
     
     if lc_transition == 'autoscaling:EC2_INSTANCE_TERMINATING':
         print "terminated"
@@ -106,25 +106,20 @@ def handle_message(message):
     if lc_transition == 'autoscaling:EC2_INSTANCE_LAUNCHING':
         print "launching"
 
-    
-
 def main():
     
-    #create_cluster('redis-cluster-11-AutoScalingGroup-13PRGAKXKXR9M', 0, 6379)
-    #return
-    
-    while(True):
-        print "--- Polling for messages ---"
-        messages = sqs.receive_message(
-                                    QueueUrl            = queue_url,
-                                    MaxNumberOfMessages = 1,
-                                    WaitTimeSeconds     = 20)
-    
-        if messages and messages.get('Messages'):
-            try:
-                handle_message(messages['Messages'][0])
-            except Exception as e:
-                print "Caught exception while processing message: ", e
+    print "--- Polling for messages ---"
+    messages = sqs.receive_message(
+                                QueueUrl            = queue_url,
+                                MaxNumberOfMessages = 10,
+                                WaitTimeSeconds     = 20)
+
+    if messages and messages.get('Messages'):
+        try:
+            for message in messages['Messages']:
+                 handle_message(message)
+        except Exception as e:
+            print "Caught exception while processing message: ", e
 
 if __name__ == "__main__":
     main()

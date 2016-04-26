@@ -93,6 +93,23 @@
                 "mode"  : "000755",
                 "owner" : "root",
                 "group" : "root"
+              },
+              "/usr/local/bin/redis-asg-lc-agent.py" : {
+                "source" : "https://raw.githubusercontent.com/vinayselvaraj/redis-cluster-asg/master/redis-asg-lc-agent.py",
+                "mode"  : "000755",
+                "owner" : "root",
+                "group" : "root"
+              },
+              "/etc/cron.d/redis-asg-lc-agent" : {
+                "content" : { "Fn::Join" : ["", [
+                  "SHELL=/bin/bash\n",
+                  "PATH=/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/bin\n",
+                  "HOME=/\n",
+                  "* * * * * root sleep `/usr/bin/expr $RANDOM \\% 59`; /usr/local/bin/redis-asg-lc-agent.py >& /dev/null\n"
+                ]]},
+                "mode"  : "000644",
+                "owner" : "root",
+                "group" : "root"
               }
             },
             "commands" : {
@@ -350,10 +367,17 @@
                   "ecr:GetAuthorizationToken",
                   "ecr:BatchCheckLayerAvailability",
                   "ecr:GetDownloadUrlForLayer",
-                  "ecr:BatchGetImage",
-                  "sqs:ReceiveMessage"
+                  "ecr:BatchGetImage"
                 ],
                 "Resource":"*"
+              },
+              {
+                "Effect": "Allow",
+                "Action": [
+                  "sqs:ReceiveMessage",
+                  "sqs:DeleteMessage"
+                ],
+                "Resource": { "Fn::GetAtt" : ["ASGLCQueue", "Arn"] }
               },
               {
                 "Effect": "Allow",
