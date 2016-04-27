@@ -29,7 +29,7 @@
     "ClusterMinSize" : {
       "Description" : "Minimum # of EC2 hosts in the Redis Cluster",
       "Type" : "Number",
-      "Default" : "3"
+      "Default" : "6"
     },
     
     "ClusterMaxSize" : {

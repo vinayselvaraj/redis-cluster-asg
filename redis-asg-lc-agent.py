@@ -57,7 +57,8 @@ def create_cluster(asg_name, num_replicas, redis_port):
     
     reservations = desc_inst_resp['Reservations']
     for reservation in reservations:
-        instance_ips.append(reservation['Instances'][0]['PrivateIpAddress'])
+        for instance in reservation['Instances']:
+            instance_ips.append(instance['PrivateIpAddress'])
     
     cmd = "/usr/local/bin/redis-trib.rb create --replicas " + str(num_replicas) + " "
     for instance_ip in instance_ips:
