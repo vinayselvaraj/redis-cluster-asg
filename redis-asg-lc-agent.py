@@ -5,14 +5,16 @@ import json
 import os
 import subprocess
 
-queue_url  = os.environ['SQS_QUEUE_URL']
-aws_region = os.environ['AWS_REGION']
+queue_url           = os.environ['SQS_QUEUE_URL']
+aws_region          = os.environ['AWS_REGION']
+instid_ip_tablename = os.environ['INST_ID_TO_IP_TABLE']
 
 boto3.setup_default_session(region_name=aws_region)
 
 sqs   = boto3.client('sqs')
 asg   = boto3.client('autoscaling')
 ec2   = boto3.client('ec2')
+ddb   = boto3.client('dynamodb')
 
 def delete_message(message):
     message_id     = message['MessageId']
@@ -23,6 +25,16 @@ def delete_message(message):
         QueueUrl = queue_url,
         ReceiptHandle = receipt_handle
     )
+
+def update_inst_id_ip_table(instance_id, ip_address):
+    instid_ip_table = ddb.Table(instid_ip_tablename)
+    instid_ip_table.put_item(
+        Item={
+            'instance_id': instance_id,
+            'ip_address': ip_address
+        }
+    )
+    print("Updated DDB table %s = %s" % instance_id, ip_address)
 
 def create_cluster(asg_name, num_replicas, redis_port):
     print("Creating cluster")
@@ -59,6 +71,9 @@ def create_cluster(asg_name, num_replicas, redis_port):
     for reservation in reservations:
         for instance in reservation['Instances']:
             instance_ips.append(instance['PrivateIpAddress'])
+            
+            #Update instance_id to ip table
+            update_inst_id_ip_table(instance['InstanceId'], instance['PrivateIpAddress'])
     
     cmd = "/usr/local/bin/redis-trib.rb create --replicas " + str(num_replicas) + " "
     for instance_ip in instance_ips:
