@@ -415,6 +415,18 @@
                 "Resource": "*"
               },
               {
+                "Effect": "Allow",
+                "Action": ["dynamodb:*"],
+                "Resource": { "Fn::Join" : [ "", [ 
+                  "arn:aws:dynamodb:", 
+                  { "Ref" : "AWS::Region" }, 
+                  ":", 
+                  { "Ref" : "AWS::AccountId"},
+                  ":table/",
+                  { "Ref" : "InstanceIdToIPTable"}
+                  ]]}
+              },
+              {
                 "Effect":"Deny",
                 "Action":"iam:*",
                 "Resource":"*"

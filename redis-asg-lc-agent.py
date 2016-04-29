@@ -27,8 +27,8 @@ def delete_message(message):
     )
 
 def update_inst_id_ip_table(instance_id, ip_address):
-    instid_ip_table = ddb.Table(instid_ip_tablename)
-    instid_ip_table.put_item(
+    ddb.put_item(
+        TableName=instid_ip_tablename,
         Item={
             'instance_id': instance_id,
             'ip_address': ip_address
