@@ -27,14 +27,19 @@ def delete_message(message):
     )
 
 def update_inst_id_ip_table(instance_id, ip_address):
+    
     ddb.put_item(
         TableName=instid_ip_tablename,
         Item={
-            'instance_id': instance_id,
-            'ip_address': ip_address
+            'instance_id': {
+                'S' : instance_id,
+            },
+            'ip_address' : {
+                'S' : ip_address
+            }
         }
     )
-    print("Updated DDB table %s = %s" % instance_id, ip_address)
+    print("Updated DDB table %s = %s" % (instance_id, ip_address) )
 
 def create_cluster(asg_name, num_replicas, redis_port):
     print("Creating cluster")
