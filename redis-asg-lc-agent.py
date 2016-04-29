@@ -4,10 +4,16 @@ import boto3
 import json
 import os
 import subprocess
+import urllib2
 
 queue_url           = os.environ['SQS_QUEUE_URL']
 aws_region          = os.environ['AWS_REGION']
 instid_ip_tablename = os.environ['INST_ID_TO_IP_TABLE']
+
+REDIS_PORT          = 6379
+
+metadata_inst_id_req = urllib2.Request('http://169.254.169.254/latest/meta-data/instance-id')
+my_instance_id      = urllib2.urlopen( metadata_inst_id_req ).read()
 
 boto3.setup_default_session(region_name=aws_region)
 
@@ -41,6 +47,36 @@ def update_inst_id_ip_table(instance_id, ip_address):
     )
     print("Updated DDB table %s = %s" % (instance_id, ip_address) )
 
+def register_instance_ips(instance_ids):
+    
+    # Describe instances to find IP of each instance
+    desc_inst_resp = ec2.describe_instances(
+        InstanceIds=instance_ids
+    )
+    
+    reservations = desc_inst_resp['Reservations']
+    for reservation in reservations:
+        for instance in reservation['Instances']:
+            update_inst_id_ip_table(instance['InstanceId'], instance['PrivateIpAddress'])
+    
+
+def get_instance_ips(instance_ids):
+    
+    instance_ips = []
+    
+    # Describe instances to find IP of each instance
+    desc_inst_resp = ec2.describe_instances(
+        InstanceIds=instance_ids
+    )
+    
+    reservations = desc_inst_resp['Reservations']
+    for reservation in reservations:
+        for instance in reservation['Instances']:
+            instance_ips.append(instance['PrivateIpAddress'])
+    
+    return instance_ips
+    
+
 def create_cluster(asg_name, num_replicas, redis_port):
     print("Creating cluster")
     
@@ -65,20 +101,8 @@ def create_cluster(asg_name, num_replicas, redis_port):
     if len(instance_ids) != desired_count:
         raise Exception("Number of instances does not meet desired count")
     
-    # Describe instances to find IP of each instance
-    desc_inst_resp = ec2.describe_instances(
-        InstanceIds=instance_ids
-    )
-    
-    instance_ips = []
-    
-    reservations = desc_inst_resp['Reservations']
-    for reservation in reservations:
-        for instance in reservation['Instances']:
-            instance_ips.append(instance['PrivateIpAddress'])
-            
-            #Update instance_id to ip table
-            update_inst_id_ip_table(instance['InstanceId'], instance['PrivateIpAddress'])
+    instance_ips = get_instance_ips(instance_ids)
+    register_instance_ips(instance_ids)
     
     cmd = "/usr/local/bin/redis-trib.rb create --replicas " + str(num_replicas) + " "
     for instance_ip in instance_ips:
@@ -96,6 +120,21 @@ def create_cluster(asg_name, num_replicas, redis_port):
     subprocess.check_call(cmd, shell=True)    
     
     #/usr/local/bin/redis-trib.rb create --replicas 0 172.31.6.212:6379 172.31.49.228:6379 172.31.19.183:6379 < yes
+
+def handle_instance_launch(instance_id, lc_token):
+    print "Handling new instance: %s" % instance_id
+    if instance_id == my_instance_id:
+        return
+    
+    instance_ids = []
+    instance_ids.append(instance_id)
+    
+    register_instance_ips(instance_ids)
+    instance_ips = get_instance_ips(instance_ids)
+    
+    instance_ip = instance_ips[0]
+    
+    
 
 def handle_message(message):
     body = json.loads(message['Body'].encode("ascii"))
@@ -125,6 +164,7 @@ def handle_message(message):
     
     if lc_transition == 'autoscaling:EC2_INSTANCE_LAUNCHING':
         print("launching")
+        handle_instance_launch(instance_id, lc_token)
 
 def main():
     

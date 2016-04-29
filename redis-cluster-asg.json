@@ -302,7 +302,7 @@
       "Properties" : {
         "AutoScalingGroupName": { "Ref": "AutoScalingGroup" },
         "LifecycleTransition": "autoscaling:EC2_INSTANCE_TERMINATING",
-        "HeartbeatTimeout" : "60",
+        "HeartbeatTimeout" : "900",
         "DefaultResult" : "CONTINUE",
         "NotificationTargetARN": { "Fn::GetAtt": [ "ASGLCQueue", "Arn" ] },
         "RoleARN": { "Fn::GetAtt": [ "ASGLCRole", "Arn" ] }
@@ -314,7 +314,7 @@
       "Properties" : {
         "AutoScalingGroupName": { "Ref": "AutoScalingGroup" },
         "LifecycleTransition": "autoscaling:EC2_INSTANCE_LAUNCHING",
-        "HeartbeatTimeout" : "60",
+        "HeartbeatTimeout" : "900",
         "DefaultResult" : "CONTINUE",
         "NotificationTargetARN": { "Fn::GetAtt": [ "ASGLCQueue", "Arn" ] },
         "RoleARN": { "Fn::GetAtt": [ "ASGLCRole", "Arn" ] }
