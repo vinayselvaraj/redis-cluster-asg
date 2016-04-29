@@ -29,19 +29,19 @@
     "ClusterMinSize" : {
       "Description" : "Minimum # of EC2 hosts in the Redis Cluster",
       "Type" : "Number",
-      "Default" : "6"
+      "Default" : "9"
     },
     
     "ClusterMaxSize" : {
       "Description" : "Maximum # of EC2 hosts in the Redis Cluster",
       "Type" : "Number",
-      "Default" : "10"
+      "Default" : "9"
     },
     
     "NumReplicas" : {
       "Description" : "Number of replicas per master",
       "Type" : "Number",
-      "Default" : "0"
+      "Default" : "2"
     },
     
     "RedisPort" : {
@@ -122,15 +122,22 @@
                 "owner" : "root",
                 "group" : "root"
               },
+              "/usr/local/bin/is_leader.sh" : {
+                "source" : "https://raw.githubusercontent.com/vinayselvaraj/redis-cluster-asg/master/is_leader.sh",
+                "mode"  : "000755",
+                "owner" : "root",
+                "group" : "root"
+              },
               "/etc/cron.d/redis-asg-lc-agent" : {
                 "content" : { "Fn::Join" : ["", [
                   "SHELL=/bin/bash\n",
                   "PATH=/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/bin\n",
                   "HOME=/\n",
+                  "ASG_NAME=", { "Ref" : "AutoScalingGroup"}, "\n",
                   "SQS_QUEUE_URL=", { "Ref" : "ASGLCQueue"}, "\n",
                   "AWS_REGION=", { "Ref" : "AWS::Region"}, "\n",
                   "INST_ID_TO_IP_TABLE=", { "Ref" : "InstanceIdToIPTable" }, "\n",
-                  "* * * * * root sleep `/usr/bin/expr $RANDOM \\% 59`; /usr/local/bin/redis-asg-lc-agent.py \n"
+                  "* * * * * root /usr/local/bin/is_leader.sh && sleep `/usr/bin/expr $RANDOM \\% 59` && /usr/local/bin/redis-asg-lc-agent.py \n"
                 ]]},
                 "mode"  : "000644",
                 "owner" : "root",
@@ -203,6 +210,12 @@
         "Tags" : [
           { "Key" : "Name", "Value" : { "Ref" : "AWS::StackName" }, "PropagateAtLaunch" : "true" }
         ]
+      },
+      "UpdatePolicy" : {
+        "AutoScalingRollingUpdate" : {
+          "MinInstancesInService" : { "Ref" : "ClusterMinSize" },
+          "MaxBatchSize" : "1"
+        }
       }
     },
     
