@@ -130,7 +130,7 @@
                   "SQS_QUEUE_URL=", { "Ref" : "ASGLCQueue"}, "\n",
                   "AWS_REGION=", { "Ref" : "AWS::Region"}, "\n",
                   "INST_ID_TO_IP_TABLE=", { "Ref" : "InstanceIdToIPTable" }, "\n",
-                  "* * * * * root sleep `/usr/bin/expr $RANDOM \\% 59` && /usr/local/bin/is_leader.sh && /usr/local/bin/redis-asg-lc-agent.py \n"
+                  "* * * * * root sleep `/usr/bin/expr $RANDOM \\% 59` && /usr/local/bin/redis-asg-lc-agent.py \n"
                 ]]},
                 "mode"  : "000644",
                 "owner" : "root",

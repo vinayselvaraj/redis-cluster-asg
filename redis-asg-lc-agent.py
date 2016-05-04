@@ -277,9 +277,7 @@ def handle_instance_termination(instance_id, lc_token):
             else:
                 print "We don't have an unused master to assign"
                 sys.exit(1)
-            
-            return
-    
+                
     if 'slave' in node['flags'] and unused_master:        
         print "Instance is a slave and we have unused master"
         
@@ -346,7 +344,71 @@ def handle_message(message):
         delete_message(message)
         complete_lc_action(lc_hook, asg_name, lc_token, 'CONTINUE', instance_id)
 
+def is_leader():
+    
+    # Get ASG name from tag
+    desc_inst_resp = ec2.describe_instances(
+        InstanceIds=[my_instance_id]
+    )
+    instance = desc_inst_resp['Reservations'][0]['Instances'][0]
+    
+    asg_name = None
+    
+    tags = instance['Tags']
+    for tag in tags:
+        if tag['Key'] == 'aws:autoscaling:groupName':
+            asg_name = tag['Value']
+    
+    instances = None
+    if asg_name:
+        desc_asg_resp = asg.describe_auto_scaling_groups(
+            AutoScalingGroupNames=[
+                asg_name
+            ]
+        )
+        asg_group = desc_asg_resp['AutoScalingGroups'][0]
+        instances = asg_group['Instances']
+    
+    if instances:
+        
+        # Get all instance IDS
+        instance_ids = []
+        for instance in instances:
+            instance_ids.append(instance['InstanceId'])
+        
+        desc_inst_resp = ec2.describe_instances(
+            InstanceIds=instance_ids
+        )
+        
+        # Find oldest instance
+        oldest_instance_id = None
+        oldest_instance_launch_time = None
+        
+        for reservation in desc_inst_resp['Reservations']:
+            for instance in reservation['Instances']:
+                if oldest_instance_id == None:
+                    oldest_instance_id = instance['InstanceId']
+                    oldest_instance_launch_time = instance['LaunchTime']
+                else:
+                    if instance['LaunchTime'] < oldest_instance_launch_time:
+                        oldest_instance_id = instance['InstanceId']
+                        oldest_instance_launch_time = instance['LaunchTime']
+                    if instance['LaunchTime'] == oldest_instance_launch_time:
+                        if instance['InstanceId'] < oldest_instance_id:
+                            oldest_instance_id = instance['InstanceId']
+        
+        print "Leader instance is: %s" % oldest_instance_id
+                
+        if my_instance_id == oldest_instance_id:
+            return True
+    
+    return False
+
 def main():
+    
+    if not is_leader():
+        print "Not leader... exiting"
+        sys.exit(0)
     
     print("Polling for messages")
     messages = sqs.receive_message(
