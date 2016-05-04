@@ -134,7 +134,8 @@ def handle_instance_launch(instance_id, lc_token):
     
     instance_ip = instance_ips[0]
     
-    
+    cmd = "redis-cli CLUSTER MEET %s %s" % (instance_ip, REDIS_PORT)
+    subprocess.check_call(cmd, shell=True)
 
 def handle_message(message):
     body = json.loads(message['Body'].encode("ascii"))
@@ -165,6 +166,7 @@ def handle_message(message):
     if lc_transition == 'autoscaling:EC2_INSTANCE_LAUNCHING':
         print("launching")
         handle_instance_launch(instance_id, lc_token)
+        delete_message(message)
 
 def main():
     
