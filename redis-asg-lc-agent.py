@@ -4,6 +4,7 @@ import boto3
 import json
 import os
 import subprocess
+import sys
 import urllib2
 
 queue_url           = os.environ['SQS_QUEUE_URL']
@@ -178,9 +179,9 @@ def handle_instance_launch(instance_id, lc_token):
     register_instance_ips(instance_ids)
     
     new_instance_ip = get_instance_ips(instance_ids)[0]
-    my_instance_id = get_instance_ips(my_instance_id)[0]
+    my_instance_ip = get_instance_ips([my_instance_id])[0]
     
-    cmd = "redis-cli -h %s -p %s CLUSTER MEET %s %s" % (new_instance_ip, REDIS_PORT, my_instance_id, REDIS_PORT)
+    cmd = "redis-cli -h %s -p %s CLUSTER MEET %s %s" % (new_instance_ip, REDIS_PORT, my_instance_ip, REDIS_PORT)
     subprocess.check_call(cmd, shell=True)
 
 def handle_instance_termination(instance_id, lc_token):
@@ -199,58 +200,104 @@ def handle_instance_termination(instance_id, lc_token):
     # Check if instance is master or slave
     node = ipport_node_dict[ipport]
     
+    # Find unused 'master' instance
+    unused_master = None
+    unused_master_ip = None
+    unused_master_port = None
+    
+    for key, value in node_ipport_dict.iteritems():
+        if 'master' in value['flags'] and not 'fail' in value['flags'] and not value['slots'].strip():
+            unused_master = value
+            unused_master_ipport = unused_master['ipport']
+            unused_master_ip = unused_master_ipport.split(':')[0]
+            unused_master_port = unused_master_ipport.split(':')[1]
+            break
+    
+    if not unused_master:
+        print "No unused masters available"
+        sys.exit(1)
+    
     # If master, skip for now.  Wait for an auto-failover
     if 'master' in node['flags']:
         master_node_id = node['id']
-        print 'Node is master.  Finding a slave to takeover master role'
         
-        slave_to_promote = None
+        # If master and has slots
+        if node['slots']:
+            print 'Node is master.  Finding a slave to takeover master role'
         
-        for key, value in node_ipport_dict.iteritems():
-            if 'slave' in value['flags'] and master_node_id in value['master'] and 'connected' in value['link-state']:
-                slave_to_promote = value
-                break
+            slave_to_promote = None
         
-        if slave_to_promote:
-            slave_ip = slave_to_promote['ipport'].split(':')[0]
-            slave_port = slave_to_promote['ipport'].split(':')[1]
-            cmd = "redis-cli -h %s -p %s CLUSTER FAILOVER TAKEOVER" % (slave_ip, slave_port)
-            subprocess.check_call(cmd, shell=True)
-            print "Sent CLUSTER FAILOVER TAKEOVER to %s" % slave_to_promote['ipport']
-           
-        sys.exit(1)
+            for key, value in node_ipport_dict.iteritems():
+                if 'slave' in value['flags'] and master_node_id in value['master'] and 'connected' in value['link-state']:
+                    slave_to_promote = value
+                    break
+        
+            if slave_to_promote:
+                slave_ip = slave_to_promote['ipport'].split(':')[0]
+                slave_port = slave_to_promote['ipport'].split(':')[1]
+                cmd = "redis-cli -h %s -p %s CLUSTER FAILOVER TAKEOVER" % (slave_ip, slave_port)
+                subprocess.check_call(cmd, shell=True)
+                print "Sent CLUSTER FAILOVER TAKEOVER to %s" % slave_to_promote['ipport']
+                
+                sys.exit(0) # Break out at this point
+        
+        else:
+            # Find master with least number of slaves
+            print "Node is master without slots.  Finding master with fewest slaves"
+            
+            master_slave_dict = dict()
+            for key, value in node_ipport_dict.iteritems():
+                if '-' not in value['master']:
+                    slaves = master_slave_dict.get(value['master'])
+                    if slaves == None:
+                        slaves = []
+                        master_slave_dict[value['master']] = slaves
+                    slaves.append(value['id'])
+                    print "Added slave: %s" % value['id']
+            
+            master_with_fewest_slaves = None
+            fewest_slave_count = 0
+            for key, value in master_slave_dict.iteritems():
+                if not master_with_fewest_slaves:
+                    master_with_fewest_slaves = key
+                    fewest_slave_count = len(value)
+                elif len(value) < fewest_slave_count:
+                    master_with_fewest_slaves = key
+                    fewest_slave_count = len(value)
+            
+            if not master_with_fewest_slaves:
+                print "Unable to find master with fewest slaves"
+                sys.exit(1)
+            
+            print "Master %s has the fewest slaves (%d)" % (master_with_fewest_slaves, fewest_slave_count)
+            
+            if unused_master:
+                print "We have an unused master"
+                make_unused_master_into_slave(unused_master_ip, unused_master_port, master_with_fewest_slaves)                
+            else:
+                print "We don't have an unused master to assign"
+                sys.exit(1)
+            
+            return
     
-    print "%s is a slave" % instance_id
-    
-    # Find unused 'master' instance
-    unused_master = None
-    for key, value in node_ipport_dict.iteritems():
-        if 'master' in value['flags'] and not value['slots'].strip():
-            unused_master = value
-    
-    # If we have an unused master, make it a slave of the terminating instance's master
-    if unused_master:
-        
-        print "Have unused master"
-        
-        unused_master_ipport = unused_master['ipport']
-        unused_master_ip = unused_master_ipport.split(':')[0]
-        unused_master_port = unused_master_ipport.split(':')[1]
-        
-        print ipport_node_dict
-        print node_ipport_dict
+    if 'slave' in node['flags'] and unused_master:        
+        print "Instance is a slave and we have unused master"
         
         master = ipport_node_dict[ipport]['master']
         
         # Tell unused master to replicate from terminating slave's master
-        cmd = "redis-cli -h %s -p %s CLUSTER REPLICATE %s" % (unused_master_ip, unused_master_port, master)
-        subprocess.check_call(cmd, shell=True)
-        print "Sent CLUSTER REPLICATE to %s" % unused_master_ipport
-        
-    else:
-        print "Unable to find an unused master"
-        sys.exit(1)
+        make_unused_master_into_slave(unused_master_ip, unused_master_port, master)
     
+    # Forget the node
+    cmd = "redis-cli CLUSTER FORGET %s" % node['id']
+    subprocess.check_call(cmd, shell=True)
+    print "Forgot node %s" % node['id']
+
+def make_unused_master_into_slave(unused_master_ip, unused_master_port, master):
+    cmd = "redis-cli -h %s -p %s CLUSTER REPLICATE %s" % (unused_master_ip, unused_master_port, master)
+    print cmd
+    subprocess.check_call(cmd, shell=True)
+    print "Sent CLUSTER REPLICATE to %s" % unused_master_ip
 
 def complete_lc_action(lc_hook, asg_name, lc_token, result, instance_id):
     asg.complete_lifecycle_action(

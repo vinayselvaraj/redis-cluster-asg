@@ -417,7 +417,7 @@
               },
               {
                 "Effect": "Allow",
-                "Action": ["autoscaling:DescribeAutoScalingGroups"],
+                "Action": ["autoscaling:DescribeAutoScalingGroups", "autoscaling:CompleteLifecycleAction"],
                 "Resource": "*"
               },
               {
