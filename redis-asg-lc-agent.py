@@ -114,15 +114,14 @@ def get_cluster_nodes():
         node_dict['link-state'] = fields[7]
         
         slots = ""
-        print len(fields)
         if len(fields) > 8:
             for i in range(8, len(fields)):
                 slots = slots + " " + fields[i]
         
         node_dict['slots'] = slots.strip()
         
-        node_ipport_dict[node_dict['ipport']] = node_dict
-        ipport_node_dict[node_dict['id']] = node_dict
+        node_ipport_dict[node_dict['id']]     = node_dict
+        ipport_node_dict[node_dict['ipport']] = node_dict
     
     return {'node_ipport_dict': node_ipport_dict, 'ipport_node_dict': ipport_node_dict}
 
@@ -191,14 +190,78 @@ def handle_instance_termination(instance_id, lc_token):
         return
     
     instance_ip = get_ip_by_inst_id(instance_id)
+    ipport = "%s:%d" % (instance_ip, REDIS_PORT)
     
     cluster_nodes = get_cluster_nodes()
-    
+    node_ipport_dict = cluster_nodes['node_ipport_dict']
+    ipport_node_dict = cluster_nodes['ipport_node_dict']
+        
     # Check if instance is master or slave
+    node = ipport_node_dict[ipport]
+    
+    # If master, skip for now.  Wait for an auto-failover
+    if 'master' in node['flags']:
+        master_node_id = node['id']
+        print 'Node is master.  Finding a slave to takeover master role'
+        
+        slave_to_promote = None
+        
+        for key, value in node_ipport_dict.iteritems():
+            if 'slave' in value['flags'] and master_node_id in value['master'] and 'connected' in value['link-state']:
+                slave_to_promote = value
+                break
+        
+        if slave_to_promote:
+            slave_ip = slave_to_promote['ipport'].split(':')[0]
+            slave_port = slave_to_promote['ipport'].split(':')[1]
+            cmd = "redis-cli -h %s -p %s CLUSTER FAILOVER TAKEOVER" % (slave_ip, slave_port)
+            subprocess.check_call(cmd, shell=True)
+            print "Sent CLUSTER FAILOVER TAKEOVER to %s" % slave_to_promote['ipport']
+           
+        sys.exit(1)
+    
+    print "%s is a slave" % instance_id
     
     # Find unused 'master' instance
+    unused_master = None
+    for key, value in node_ipport_dict.iteritems():
+        if 'master' in value['flags'] and not value['slots'].strip():
+            unused_master = value
     
+    # If we have an unused master, make it a slave of the terminating instance's master
+    if unused_master:
+        
+        print "Have unused master"
+        
+        unused_master_ipport = unused_master['ipport']
+        unused_master_ip = unused_master_ipport.split(':')[0]
+        unused_master_port = unused_master_ipport.split(':')[1]
+        
+        print ipport_node_dict
+        print node_ipport_dict
+        
+        master = ipport_node_dict[ipport]['master']
+        
+        # Tell unused master to replicate from terminating slave's master
+        cmd = "redis-cli -h %s -p %s CLUSTER REPLICATE %s" % (unused_master_ip, unused_master_port, master)
+        subprocess.check_call(cmd, shell=True)
+        print "Sent CLUSTER REPLICATE to %s" % unused_master_ipport
+        
+    else:
+        print "Unable to find an unused master"
+        sys.exit(1)
     
+
+def complete_lc_action(lc_hook, asg_name, lc_token, result, instance_id):
+    asg.complete_lifecycle_action(
+        LifecycleHookName=lc_hook,
+        AutoScalingGroupName=asg_name,
+        LifecycleActionToken=lc_token,
+        LifecycleActionResult=result,
+        InstanceId=instance_id
+    )
+    print "Completed lifecycle action"
+
 
 def handle_message(message):
     body = json.loads(message['Body'].encode("ascii"))
@@ -226,11 +289,15 @@ def handle_message(message):
     if lc_transition == 'autoscaling:EC2_INSTANCE_TERMINATING':
         print("terminated")
         handle_instance_termination(instance_id, lc_token)
+        delete_message(message)
+        complete_lc_action(lc_hook, asg_name, lc_token, 'CONTINUE', instance_id)
+        
     
     if lc_transition == 'autoscaling:EC2_INSTANCE_LAUNCHING':
         print("launching")
         handle_instance_launch(instance_id, lc_token)
         delete_message(message)
+        complete_lc_action(lc_hook, asg_name, lc_token, 'CONTINUE', instance_id)
 
 def main():
     
