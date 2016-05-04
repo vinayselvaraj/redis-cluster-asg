@@ -35,7 +35,7 @@
     "ClusterMaxSize" : {
       "Description" : "Maximum # of EC2 hosts in the Redis Cluster",
       "Type" : "Number",
-      "Default" : "9"
+      "Default" : "10"
     },
     
     "NumReplicas" : {
