@@ -45,7 +45,25 @@ def update_inst_id_ip_table(instance_id, ip_address):
             }
         }
     )
-    print("Updated DDB table %s = %s" % (instance_id, ip_address) )
+
+def get_ip_by_inst_id(instance_id):
+    
+    item = ddb.get_item(
+        TableName=instid_ip_tablename,
+        Key={
+            'instance_id': {
+                'S' : instance_id
+            }
+        },
+        AttributesToGet=[
+            'ip_address'
+        ],
+        ConsistentRead=False
+    )
+    
+    print item
+    return item['Item']['ip_address']['S']
+
 
 def register_instance_ips(instance_ids):
     
@@ -75,7 +93,38 @@ def get_instance_ips(instance_ids):
             instance_ips.append(instance['PrivateIpAddress'])
     
     return instance_ips
+
+def get_cluster_nodes():
+    cmd = "redis-cli CLUSTER NODES"
+    process = subprocess.Popen([ cmd ], stdout=subprocess.PIPE, shell=True) 
+    out, err = process.communicate()
+    lines = out.strip().split('\n')
     
+    node_ipport_dict = dict()
+    ipport_node_dict = dict()
+    
+    for line in lines:
+        fields = line.split(' ')
+        
+        node_dict = dict()
+        node_dict['id']         = fields[0]
+        node_dict['ipport']     = fields[1]
+        node_dict['flags']      = fields[2]
+        node_dict['master']     = fields[3]
+        node_dict['link-state'] = fields[7]
+        
+        slots = ""
+        print len(fields)
+        if len(fields) > 8:
+            for i in range(8, len(fields)):
+                slots = slots + " " + fields[i]
+        
+        node_dict['slots'] = slots.strip()
+        
+        node_ipport_dict[node_dict['ipport']] = node_dict
+        ipport_node_dict[node_dict['id']] = node_dict
+    
+    return {'node_ipport_dict': node_ipport_dict, 'ipport_node_dict': ipport_node_dict}
 
 def create_cluster(asg_name, num_replicas, redis_port):
     print("Creating cluster")
@@ -118,8 +167,6 @@ def create_cluster(asg_name, num_replicas, redis_port):
     
     # Run the redis-trib.rb create command
     subprocess.check_call(cmd, shell=True)    
-    
-    #/usr/local/bin/redis-trib.rb create --replicas 0 172.31.6.212:6379 172.31.49.228:6379 172.31.19.183:6379 < yes
 
 def handle_instance_launch(instance_id, lc_token):
     print "Handling new instance: %s" % instance_id
@@ -139,8 +186,13 @@ def handle_instance_launch(instance_id, lc_token):
 
 def handle_instance_termination(instance_id, lc_token):
     print "Handling termination for instance: %s" % instance_id
+    
     if instance_id == my_instance_id:
         return
+    
+    instance_ip = get_ip_by_inst_id(instance_id)
+    
+    cluster_nodes = get_cluster_nodes()
     
     # Check if instance is master or slave
     
@@ -173,6 +225,7 @@ def handle_message(message):
     
     if lc_transition == 'autoscaling:EC2_INSTANCE_TERMINATING':
         print("terminated")
+        handle_instance_termination(instance_id, lc_token)
     
     if lc_transition == 'autoscaling:EC2_INSTANCE_LAUNCHING':
         print("launching")
