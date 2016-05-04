@@ -58,7 +58,7 @@ def register_instance_ips(instance_ids):
     for reservation in reservations:
         for instance in reservation['Instances']:
             update_inst_id_ip_table(instance['InstanceId'], instance['PrivateIpAddress'])
-    
+
 
 def get_instance_ips(instance_ids):
     
@@ -130,12 +130,23 @@ def handle_instance_launch(instance_id, lc_token):
     instance_ids.append(instance_id)
     
     register_instance_ips(instance_ids)
-    instance_ips = get_instance_ips(instance_ids)
     
-    instance_ip = instance_ips[0]
+    new_instance_ip = get_instance_ips(instance_ids)[0]
+    my_instance_id = get_instance_ips(my_instance_id)[0]
     
-    cmd = "redis-cli CLUSTER MEET %s %s" % (instance_ip, REDIS_PORT)
+    cmd = "redis-cli -h %s -p %s CLUSTER MEET %s %s" % (new_instance_ip, REDIS_PORT, my_instance_id, REDIS_PORT)
     subprocess.check_call(cmd, shell=True)
+
+def handle_instance_termination(instance_id, lc_token):
+    print "Handling termination for instance: %s" % instance_id
+    if instance_id == my_instance_id:
+        return
+    
+    # Check if instance is master or slave
+    
+    # Find unused 'master' instance
+    
+    
 
 def handle_message(message):
     body = json.loads(message['Body'].encode("ascii"))
