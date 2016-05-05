@@ -290,13 +290,8 @@ def handle_instance_termination(instance_id, lc_token):
     
     # Forget the node
     cmd = "redis-cli CLUSTER FORGET %s" % node['id']
-    output = subprocess.check_output(cmd, shell=True)
-    print cmd
-    print output
-    if 'OK' in output:
-        print "Forgot node %s" % node['id']
-    else:
-        sys.exit(1)
+    subprocess.check_output(cmd, shell=True)
+    print "Forgot node %s" % node['id']
 
 def make_unused_master_into_slave(unused_master_ip, unused_master_port, master):
     cmd = "redis-cli -h %s -p %s CLUSTER REPLICATE %s" % (unused_master_ip, unused_master_port, master)
