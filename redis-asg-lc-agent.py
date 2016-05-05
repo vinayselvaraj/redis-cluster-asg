@@ -227,10 +227,12 @@ def handle_instance_termination(instance_id, lc_token):
             slave_to_promote = None
         
             for key, value in node_ipport_dict.iteritems():
-                if 'slave' in value['flags'] 
-                    and 'fail' not in value['flags']
-                    and master_node_id in value['master'] 
-                    and 'connected' in value['link-state']:
+                if (
+                        'slave' in value['flags']
+                        and 'fail' not in value['flags']
+                        and master_node_id in value['master'] 
+                        and 'connected' in value['link-state']
+                    ):
                     slave_to_promote = value
                     break
         
