@@ -171,7 +171,7 @@ def create_cluster(asg_name, num_replicas, redis_port):
 def handle_instance_launch(instance_id, lc_token):
     print "Handling new instance: %s" % instance_id
     if instance_id == my_instance_id:
-        return
+        sys.exit(1)
     
     instance_ids = []
     instance_ids.append(instance_id)
@@ -188,7 +188,7 @@ def handle_instance_termination(instance_id, lc_token):
     print "Handling termination for instance: %s" % instance_id
     
     if instance_id == my_instance_id:
-        return
+        sys.exit(1)
     
     instance_ip = get_ip_by_inst_id(instance_id)
     ipport = "%s:%d" % (instance_ip, REDIS_PORT)
