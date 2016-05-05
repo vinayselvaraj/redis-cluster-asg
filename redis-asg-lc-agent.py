@@ -239,7 +239,8 @@ def handle_instance_termination(instance_id, lc_token):
                 subprocess.check_call(cmd, shell=True)
                 print "Sent CLUSTER FAILOVER TAKEOVER to %s" % slave_to_promote['ipport']
                 
-                sys.exit(0) # Break out at this point
+            
+            sys.exit(0) # Break out at this point
         
         else:
             # Find master with least number of slaves
