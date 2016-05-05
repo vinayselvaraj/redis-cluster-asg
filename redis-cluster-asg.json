@@ -406,6 +406,7 @@
                 "Effect": "Allow",
                 "Action": [
                   "sqs:ReceiveMessage",
+                  "sqs:SendMessage",
                   "sqs:DeleteMessage"
                 ],
                 "Resource": { "Fn::GetAtt" : ["ASGLCQueue", "Arn"] }
