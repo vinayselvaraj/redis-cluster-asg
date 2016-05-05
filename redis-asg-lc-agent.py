@@ -217,7 +217,6 @@ def handle_instance_termination(instance_id, lc_token):
         print "No unused masters available"
         sys.exit(1)
     
-    # If master, skip for now.  Wait for an auto-failover
     if 'master' in node['flags']:
         master_node_id = node['id']
         
@@ -228,7 +227,10 @@ def handle_instance_termination(instance_id, lc_token):
             slave_to_promote = None
         
             for key, value in node_ipport_dict.iteritems():
-                if 'slave' in value['flags'] and master_node_id in value['master'] and 'connected' in value['link-state']:
+                if 'slave' in value['flags'] 
+                    and 'fail' not in value['flags']
+                    and master_node_id in value['master'] 
+                    and 'connected' in value['link-state']:
                     slave_to_promote = value
                     break
         
@@ -239,16 +241,15 @@ def handle_instance_termination(instance_id, lc_token):
                 subprocess.check_call(cmd, shell=True)
                 print "Sent CLUSTER FAILOVER TAKEOVER to %s" % slave_to_promote['ipport']
                 
-            
             sys.exit(0) # Break out at this point
         
-        else:
+        else: # Master without slots
             # Find master with least number of slaves
             print "Node is master without slots.  Finding master with fewest slaves"
             
             master_slave_dict = dict()
             for key, value in node_ipport_dict.iteritems():
-                if '-' not in value['master']:
+                if '-' not in value['master'] and 'fail' not in value['flags']:
                     slaves = master_slave_dict.get(value['master'])
                     if slaves == None:
                         slaves = []
