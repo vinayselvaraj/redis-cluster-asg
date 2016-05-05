@@ -298,12 +298,24 @@ def handle_instance_termination(instance_id, lc_token):
         # Tell unused master to replicate from terminating slave's master
         make_unused_master_into_slave(unused_master_ip, unused_master_port, master)
     
-    # Forget the node
-    cmd = "redis-cli CLUSTER FORGET %s" % node['id']
+    # Send forget node command to the queue
+    msg = dict()
+    msg['Body'] = dict()
+    msg['Body']['event'] = 'CLUSTER_FORGET'
+    msg['Body']['node_id'] = node['id']
+    
+    sqs.receive_message(
+                            QueueUrl            = queue_url,
+                            MessageBody         = json.dumps(msg))
+    
+
+def forget_node(node_id):
+    cmd = "redis-cli CLUSTER FORGET %s" % node_id
     output = subprocess.check_output(cmd, shell=True)
     if 'OK' in output:
-        print "Forgot node %s" % node['id']
+        print "Forgot node %s" % node_id
     else:
+        print "Unable to forget node %s, output=%s" % (node_id, output)
         sys.exit(1)
 
 def make_unused_master_into_slave(unused_master_ip, unused_master_port, master):
@@ -335,6 +347,11 @@ def handle_message(message):
     
     num_replicas  = body.get('NumReplicas')
     redis_port    = body.get('RedisPort')
+    
+    if event == 'CLUSTER_FORGET':
+        node_id = body.get('node_id')
+        forget_node(node_id)
+        delete_message(message)
     
     if event == 'autoscaling:TEST_NOTIFICATION':
         print("Removing test notification")
