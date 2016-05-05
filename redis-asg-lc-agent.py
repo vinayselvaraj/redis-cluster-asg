@@ -304,7 +304,7 @@ def handle_instance_termination(instance_id, lc_token):
     msg['Body']['event'] = 'CLUSTER_FORGET'
     msg['Body']['node_id'] = node['id']
     
-    sqs.receive_message(
+    sqs.send_message(
                             QueueUrl            = queue_url,
                             MessageBody         = json.dumps(msg))
     
