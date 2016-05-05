@@ -242,6 +242,8 @@ def handle_instance_termination(instance_id, lc_token):
                 cmd = "redis-cli -h %s -p %s CLUSTER FAILOVER TAKEOVER" % (slave_ip, slave_port)
                 subprocess.check_call(cmd, shell=True)
                 print "Sent CLUSTER FAILOVER TAKEOVER to %s" % slave_to_promote['ipport']
+            else:
+                print "Unable to find any slaves to promote"
                 
             sys.exit(0) # Break out at this point
         
