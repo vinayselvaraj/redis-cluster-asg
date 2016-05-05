@@ -242,10 +242,16 @@ def handle_instance_termination(instance_id, lc_token):
                 cmd = "redis-cli -h %s -p %s CLUSTER FAILOVER TAKEOVER" % (slave_ip, slave_port)
                 subprocess.check_call(cmd, shell=True)
                 print "Sent CLUSTER FAILOVER TAKEOVER to %s" % slave_to_promote['ipport']
-            else:
-                print "Unable to find any slaves to promote"
                 
-            sys.exit(0) # Break out at this point
+                # Make unused master slave of promoted slave
+                make_unused_master_into_slave(unused_master_ip, unused_master_port, slave_to_promote['id'])
+                
+            else:
+                print "Unable to find any slaves to promote so making unused master take over"
+                
+                cmd = "redis-cli -h %s -p %s CLUSTER FAILOVER TAKEOVER" % (unused_master_ip, unused_master_port)
+                subprocess.check_call(cmd, shell=True)
+                print "Sent CLUSTER FAILOVER TAKEOVER to %s" % unused_master_ip
         
         else: # Master without slots
             # Find master with least number of slaves
