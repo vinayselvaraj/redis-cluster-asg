@@ -301,7 +301,7 @@ def handle_instance_termination(instance_id, lc_token):
     # Send forget node command to the queue
     msg = dict()
     msg['Body'] = dict()
-    msg['Body']['event'] = 'CLUSTER_FORGET'
+    msg['Body']['Event'] = 'CLUSTER_FORGET'
     msg['Body']['node_id'] = node['id']
     
     sqs.send_message(
@@ -310,6 +310,7 @@ def handle_instance_termination(instance_id, lc_token):
     
 
 def forget_node(node_id):
+    print("Received CLUSTER_FORGET")
     cmd = "redis-cli CLUSTER FORGET %s" % node_id
     output = subprocess.check_output(cmd, shell=True)
     if 'OK' in output:
