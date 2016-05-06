@@ -126,7 +126,7 @@ def get_cluster_state():
         value = line.split(':')[1]
         
         if key == 'cluster_state':
-            return value
+            return value.strip()
 
 
 def get_cluster_nodes():
