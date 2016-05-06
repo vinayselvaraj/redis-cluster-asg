@@ -95,6 +95,22 @@ def get_instance_ips(instance_ids):
     
     return instance_ips
 
+
+def get_cluster_state():
+    
+    cmd = "redis-cli CLUSTER INFO"
+    process = subprocess.Popen([ cmd ], stdout=subprocess.PIPE, shell=True) 
+    out, err = process.communicate()
+    lines = out.strip().split('\n')
+    
+    for line in lines:
+        key   = line.split(':')[0]
+        value = line.split(':')[1]
+        
+        if key == 'cluster_state':
+            return value
+
+
 def get_cluster_nodes():
     cmd = "redis-cli CLUSTER NODES"
     process = subprocess.Popen([ cmd ], stdout=subprocess.PIPE, shell=True) 
@@ -310,6 +326,10 @@ def handle_instance_termination(instance_id, lc_token):
 
 def forget_node(node_id):
     print("Received CLUSTER_FORGET")
+    
+    if get_cluster_state() != 'ok':
+        print "Cluster is not in an OK state.  Cannot process CLUSTER_FORGET"
+        sys.exit(1)
     
     # Get cluster nodes
     cluster_nodes = get_cluster_nodes()
