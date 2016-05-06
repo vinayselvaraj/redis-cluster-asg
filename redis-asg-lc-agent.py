@@ -202,7 +202,6 @@ def create_cluster(asg_name, num_replicas, redis_port):
     # Run the redis-trib.rb create command
     subprocess.check_call(cmd, shell=True)
     
-    
     # Register cluster nodes
     nodes = get_cluster_nodes()
     node_ipport_dict = cluster_nodes['node_ipport_dict']
@@ -224,6 +223,15 @@ def handle_instance_launch(instance_id, lc_token):
     
     cmd = "redis-cli -h %s -p %s CLUSTER MEET %s %s" % (new_instance_ip, REDIS_PORT, my_instance_ip, REDIS_PORT)
     subprocess.check_call(cmd, shell=True)
+    
+    # Register cluster nodes
+    nodes = get_cluster_nodes()
+    node_ipport_dict = cluster_nodes['node_ipport_dict']
+    ipport = "%s:%d" % (new_instance_ip, REDIS_PORT)
+    for key, value in node_ipport_dict.iteritems():
+        if value['ipport'] == ipport:
+            put_config_entry(vale['id'], value['ipport'])
+            break
 
 def handle_instance_termination(instance_id, lc_token):
     print "Handling termination for instance: %s" % instance_id
