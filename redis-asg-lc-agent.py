@@ -496,7 +496,10 @@ def main():
     #    sys.exit(0)
     
     print("Performing cleanup")
-    do_cleanup()
+    try:
+        do_cleanup()
+    except Exception as e:
+        print("Caught exception while doing cleanup: ", e)
     
     print("Polling for messages")
     messages = sqs.receive_message(
