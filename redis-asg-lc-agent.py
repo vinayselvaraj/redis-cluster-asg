@@ -300,9 +300,8 @@ def handle_instance_termination(instance_id, lc_token):
     
     # Send forget node command to the queue
     msg = dict()
-    msg['Body'] = dict()
-    msg['Body']['Event'] = 'CLUSTER_FORGET'
-    msg['Body']['node_id'] = node['id']
+    msg['Event'] = 'CLUSTER_FORGET'
+    msg['node_id'] = node['id']
     
     sqs.send_message(
                             QueueUrl            = queue_url,
