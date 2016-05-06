@@ -226,11 +226,11 @@ def handle_instance_launch(instance_id, lc_token):
     
     # Register cluster node
     nodes = get_cluster_nodes()
-    node_ipport_dict = cluster_nodes['node_ipport_dict']
+    node_ipport_dict = nodes['node_ipport_dict']
     ipport = "%s:%d" % (new_instance_ip, REDIS_PORT)
     for key, value in node_ipport_dict.iteritems():
         if value['ipport'] == ipport:
-            put_config_entry(vale['id'], value['ipport'])
+            put_config_entry(value['id'], value['ipport'])
             break
 
 def handle_instance_termination(instance_id, lc_token):
