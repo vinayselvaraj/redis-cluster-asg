@@ -9,7 +9,7 @@ import urllib2
 
 queue_url           = os.environ['SQS_QUEUE_URL']
 aws_region          = os.environ['AWS_REGION']
-instid_ip_tablename = os.environ['INST_ID_TO_IP_TABLE']
+config_tablename    = os.environ['CONFIG_TABLE']
 
 REDIS_PORT          = 6379
 
@@ -33,38 +33,56 @@ def delete_message(message):
         ReceiptHandle = receipt_handle
     )
 
-def update_inst_id_ip_table(instance_id, ip_address):
+def remove_config_entry(key):
     
-    ddb.put_item(
-        TableName=instid_ip_tablename,
-        Item={
-            'instance_id': {
-                'S' : instance_id,
-            },
-            'ip_address' : {
-                'S' : ip_address
+    ddb.delete_item(
+        TableName=config_tablename,
+        Key={
+            'key': {
+                'S' : key
             }
         }
     )
 
-def get_ip_by_inst_id(instance_id):
+def put_config_entry(key, value):
     
-    item = ddb.get_item(
-        TableName=instid_ip_tablename,
-        Key={
-            'instance_id': {
-                'S' : instance_id
+    ddb.put_item(
+        TableName=config_tablename,
+        Item={
+            'key': {
+                'S' : key,
+            },
+            'value' : {
+                'S' : value
             }
-        },
-        AttributesToGet=[
-            'ip_address'
-        ],
-        ConsistentRead=False
+        }
     )
-    
-    print item
-    return item['Item']['ip_address']['S']
 
+def get_config_entry(key):
+    
+    value = None
+    
+    try:
+        item = ddb.get_item(
+            TableName=config_tablename,
+            Key={
+                'key': {
+                    'S' : key
+                }
+            },
+            AttributesToGet=[
+                'value'
+            ],
+            ConsistentRead=False
+        )
+    
+        print item
+        value = item['Item']['value']['S']
+    except Exception as e:
+        print "Unable to get item from config table: %s" % key
+    
+    return value
+        
 
 def register_instance_ips(instance_ids):
     
@@ -76,7 +94,7 @@ def register_instance_ips(instance_ids):
     reservations = desc_inst_resp['Reservations']
     for reservation in reservations:
         for instance in reservation['Instances']:
-            update_inst_id_ip_table(instance['InstanceId'], instance['PrivateIpAddress'])
+            put_config_entry(instance['InstanceId'], instance['PrivateIpAddress'])
 
 
 def get_instance_ips(instance_ids):
@@ -182,7 +200,14 @@ def create_cluster(asg_name, num_replicas, redis_port):
     f.close()
     
     # Run the redis-trib.rb create command
-    subprocess.check_call(cmd, shell=True)    
+    subprocess.check_call(cmd, shell=True)
+    
+    
+    # Register cluster nodes
+    nodes = get_cluster_nodes()
+    node_ipport_dict = cluster_nodes['node_ipport_dict']
+    for key, value in node_ipport_dict.iteritems():
+        put_config_entry(vale['id'], value['ipport'])
 
 def handle_instance_launch(instance_id, lc_token):
     print "Handling new instance: %s" % instance_id
@@ -206,7 +231,7 @@ def handle_instance_termination(instance_id, lc_token):
     if instance_id == my_instance_id:
         sys.exit(1)
     
-    instance_ip = get_ip_by_inst_id(instance_id)
+    instance_ip = get_config_entry(instance_id)
     ipport = "%s:%d" % (instance_ip, REDIS_PORT)
     
     cluster_nodes = get_cluster_nodes()
@@ -314,51 +339,37 @@ def handle_instance_termination(instance_id, lc_token):
         # Tell unused master to replicate from terminating slave's master
         make_unused_master_into_slave(unused_master_ip, unused_master_port, master)
     
-    # Send forget node command to the queue
-    msg = dict()
-    msg['Event'] = 'CLUSTER_FORGET'
-    msg['node_id'] = node['id']
-    
-    sqs.send_message(
-                            QueueUrl            = queue_url,
-                            MessageBody         = json.dumps(msg))
+    # Delete the node from the config
+    remove_config_entry(node['id'])
     
 
-def forget_node(node_id):
-    print("Received CLUSTER_FORGET")
+def do_cleanup():
     
     if get_cluster_state() != 'ok':
-        print "Cluster is not in an OK state.  Cannot process CLUSTER_FORGET"
+        print "Cluster is not in an OK state.  Cannot process cleanup"
         sys.exit(1)
     
     # Get cluster nodes
     cluster_nodes = get_cluster_nodes()
     node_ipport_dict = cluster_nodes['node_ipport_dict']
     
-    # Senc cluster forget to all nodes in the cluster that are not in a fail state
+    # Check all nodes in the fail state
     for key, value in node_ipport_dict.iteritems():
-        if 'fail' not in value['flags']:
+        if 'fail' in value['flags']:
             node = value
-            node_ipport = unused_master['ipport']
-            node_ip = unused_master_ipport.split(':')[0]
-            node_port = unused_master_ipport.split(':')[1]
             
-            cmd = "redis-cli -h %s -p %s CLUSTER FORGET %s" % (node_ip, node_port, node_id)
-            print cmd
+            # Check if node exists in the DB
+            ipport = get_config_entry(node['id'])
+            
+            if ipport == None:
+                cmd = "redis-cli CLUSTER FORGET %s" % node['id']
+                print cmd
             
             try:
                 subprocess.check_output(cmd, shell=True)
             except Exception as e:
                 print ("Caught exception while running CLUSTER FORGET: %s" % cmd)
     
-    # Check if node is still known
-    #if node_ipport_dict.get(node_id):
-    #    print "Node %s is still known.  Will try to forget it" % (node_id)
-    #    cmd = "redis-cli CLUSTER FORGET %s" % node_id
-    #    subprocess.check_output(cmd, shell=True)
-    #    print "Forgot node %s" % node_id
-    #    sys.exit(1) # Break out
-
 def make_unused_master_into_slave(unused_master_ip, unused_master_port, master):
     cmd = "redis-cli -h %s -p %s CLUSTER REPLICATE %s" % (unused_master_ip, unused_master_port, master)
     print cmd
@@ -482,6 +493,9 @@ def main():
     #if not is_leader():
     #    print "Not leader... exiting"
     #    sys.exit(0)
+    
+    print("Performing cleanup")
+    do_cleanup()
     
     print("Polling for messages")
     messages = sqs.receive_message(

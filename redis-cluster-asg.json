@@ -69,18 +69,18 @@
   
   "Resources" : {
     
-    "InstanceIdToIPTable" : {
+    "ConfigTable" : {
       "Type" : "AWS::DynamoDB::Table",
       "Properties" : {
         "KeySchema" : [
           {
-            "AttributeName" : "instance_id",
+            "AttributeName" : "key",
             "KeyType" : "HASH"
           }
         ],
         "AttributeDefinitions" : [
           {
-            "AttributeName" : "instance_id",
+            "AttributeName" : "value",
             "AttributeType" : "S"
           }
         ],
@@ -129,7 +129,7 @@
                   "HOME=/\n",
                   "SQS_QUEUE_URL=", { "Ref" : "ASGLCQueue"}, "\n",
                   "AWS_REGION=", { "Ref" : "AWS::Region"}, "\n",
-                  "INST_ID_TO_IP_TABLE=", { "Ref" : "InstanceIdToIPTable" }, "\n",
+                  "CONFIG_TABLE=", { "Ref" : "ConfigTable" }, "\n",
                   "* * * * * root sleep `/usr/bin/expr $RANDOM \\% 59` && /usr/local/bin/redis-asg-lc-agent.py \n"
                 ]]},
                 "mode"  : "000644",
@@ -384,25 +384,6 @@
             "Version" : "2012-10-17",
             "Statement" : [
               {
-                "Effect":"Allow",
-                "Action":[
-                  "ecs:CreateCluster",
-                  "ecs:DeregisterContainerInstance",
-                  "ecs:DiscoverPollEndpoint",
-                  "ecs:Poll",
-                  "ecs:RegisterContainerInstance",
-                  "ecs:StartTelemetrySession",
-                  "ecs:DescribeServices",
-                  "ecs:UpdateService",
-                  "ecs:Submit*",
-                  "ecr:GetAuthorizationToken",
-                  "ecr:BatchCheckLayerAvailability",
-                  "ecr:GetDownloadUrlForLayer",
-                  "ecr:BatchGetImage"
-                ],
-                "Resource":"*"
-              },
-              {
                 "Effect": "Allow",
                 "Action": [
                   "sqs:ReceiveMessage",
@@ -430,7 +411,7 @@
                   ":", 
                   { "Ref" : "AWS::AccountId"},
                   ":table/",
-                  { "Ref" : "InstanceIdToIPTable"}
+                  { "Ref" : "ConfigTable"}
                   ]]}
               },
               {
