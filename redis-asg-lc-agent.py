@@ -339,8 +339,9 @@ def handle_instance_termination(instance_id, lc_token):
         # Tell unused master to replicate from terminating slave's master
         make_unused_master_into_slave(unused_master_ip, unused_master_port, master)
     
-    # Delete the node from the config
+    # Delete the node & instance id from the config
     remove_config_entry(node['id'])
+    remove_config_entry(instance_id)
     
 
 def do_cleanup():
@@ -362,8 +363,8 @@ def do_cleanup():
             ipport = get_config_entry(node['id'])
             
             if ipport == None:
+                print "Going to forget node %s" % node['id']
                 cmd = "redis-cli CLUSTER FORGET %s" % node['id']
-                print cmd
             
             try:
                 subprocess.check_output(cmd, shell=True)

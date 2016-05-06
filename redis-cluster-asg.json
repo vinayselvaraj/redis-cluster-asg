@@ -80,7 +80,7 @@
         ],
         "AttributeDefinitions" : [
           {
-            "AttributeName" : "value",
+            "AttributeName" : "key",
             "AttributeType" : "S"
           }
         ],
