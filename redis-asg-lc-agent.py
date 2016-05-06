@@ -333,15 +333,31 @@ def forget_node(node_id):
     
     # Get cluster nodes
     cluster_nodes = get_cluster_nodes()
+    node_ipport_dict = cluster_nodes['node_ipport_dict']
+    
+    # Senc cluster forget to all nodes in the cluster that are not in a fail state
+    for key, value in node_ipport_dict.iteritems():
+        if 'fail' not in value['flags']:
+            node = value
+            node_ipport = unused_master['ipport']
+            node_ip = unused_master_ipport.split(':')[0]
+            node_port = unused_master_ipport.split(':')[1]
+            
+            cmd = "redis-cli -h %s -p %s CLUSTER FORGET %s" % (node_ip, node_port, node_id)
+            print cmd
+            
+            try:
+                subprocess.check_output(cmd, shell=True)
+            except Exception as e:
+                print ("Caught exception while running CLUSTER FORGET: %s" % cmd)
     
     # Check if node is still known
-    node_ipport_dict = cluster_nodes['node_ipport_dict']
-    if node_ipport_dict.get(node_id):
-        print "Node %s is still known.  Will try to forget it" % (node_id)
-        cmd = "redis-cli CLUSTER FORGET %s" % node_id
-        subprocess.check_output(cmd, shell=True)
-        print "Forgot node %s" % node_id
-        sys.exit(1) # Break out
+    #if node_ipport_dict.get(node_id):
+    #    print "Node %s is still known.  Will try to forget it" % (node_id)
+    #    cmd = "redis-cli CLUSTER FORGET %s" % node_id
+    #    subprocess.check_output(cmd, shell=True)
+    #    print "Forgot node %s" % node_id
+    #    sys.exit(1) # Break out
 
 def make_unused_master_into_slave(unused_master_ip, unused_master_port, master):
     cmd = "redis-cli -h %s -p %s CLUSTER REPLICATE %s" % (unused_master_ip, unused_master_port, master)
