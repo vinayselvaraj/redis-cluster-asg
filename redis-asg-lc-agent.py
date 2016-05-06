@@ -348,7 +348,7 @@ def do_cleanup():
     
     if get_cluster_state() != 'ok':
         print "Cluster is not in an OK state.  Cannot process cleanup"
-        sys.exit(1)
+        return
     
     # Get cluster nodes
     cluster_nodes = get_cluster_nodes()
