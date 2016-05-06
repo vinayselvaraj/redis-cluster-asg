@@ -443,9 +443,9 @@ def is_leader():
 
 def main():
     
-    #if not is_leader():
-    #    print "Not leader... exiting"
-    #    sys.exit(0)
+    if not is_leader():
+        print "Not leader... exiting"
+        sys.exit(0)
     
     print("Polling for messages")
     messages = sqs.receive_message(
