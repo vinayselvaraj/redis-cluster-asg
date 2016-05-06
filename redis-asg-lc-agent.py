@@ -206,7 +206,7 @@ def create_cluster(asg_name, num_replicas, redis_port):
     nodes = get_cluster_nodes()
     node_ipport_dict = nodes['node_ipport_dict']
     for key, value in node_ipport_dict.iteritems():
-        put_config_entry(vale['id'], value['ipport'])
+        put_config_entry(value['id'], value['ipport'])
 
 def handle_instance_launch(instance_id, lc_token):
     print "Handling new instance: %s" % instance_id
