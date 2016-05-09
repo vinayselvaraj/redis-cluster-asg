@@ -13,8 +13,9 @@ config_tablename    = os.environ['CONFIG_TABLE']
 
 REDIS_PORT          = 6379
 
-metadata_inst_id_req = urllib2.Request('http://169.254.169.254/latest/meta-data/instance-id')
-my_instance_id      = urllib2.urlopen( metadata_inst_id_req ).read()
+MY_INSTANCE_ID      = urllib2.urlopen(
+                        urllib2.Request('http://169.254.169.254/latest/meta-data/instance-id')
+                      ).read()
 
 boto3.setup_default_session(region_name=aws_region)
 
@@ -210,7 +211,7 @@ def create_cluster(asg_name, num_replicas):
 
 def handle_instance_launch(instance_id, lc_token):
     print "Handling new instance: %s" % instance_id
-    if instance_id == my_instance_id:
+    if instance_id == MY_INSTANCE_ID:
         sys.exit(1)
     
     instance_ids = []
@@ -219,7 +220,7 @@ def handle_instance_launch(instance_id, lc_token):
     register_instance_ips(instance_ids)
     
     new_instance_ip = get_instance_ips(instance_ids)[0]
-    my_instance_ip = get_instance_ips([my_instance_id])[0]
+    my_instance_ip = get_instance_ips([MY_INSTANCE_ID])[0]
     
     cmd = "redis-cli -h %s -p %s CLUSTER MEET %s %s" % (new_instance_ip, REDIS_PORT, my_instance_ip, REDIS_PORT)
     subprocess.check_call(cmd, shell=True)
@@ -236,7 +237,7 @@ def handle_instance_launch(instance_id, lc_token):
 def handle_instance_termination(instance_id, lc_token):
     print "Handling termination for instance: %s" % instance_id
     
-    if instance_id == my_instance_id:
+    if instance_id == MY_INSTANCE_ID:
         sys.exit(1)
     
     instance_ip = get_config_entry(instance_id)
@@ -404,11 +405,6 @@ def handle_message(message):
     lc_transition = body.get('LifecycleTransition')
     
     num_replicas  = body.get('NumReplicas')
-    
-    if event == 'CLUSTER_FORGET':
-        node_id = body.get('node_id')
-        forget_node(node_id)
-        delete_message(message)
     
     if event == 'autoscaling:TEST_NOTIFICATION':
         print("Removing test notification")
