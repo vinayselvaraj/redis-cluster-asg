@@ -160,7 +160,7 @@ def get_cluster_nodes():
     
     return {'node_ipport_dict': node_ipport_dict, 'ipport_node_dict': ipport_node_dict}
 
-def create_cluster(asg_name, num_replicas, redis_port):
+def create_cluster(asg_name, num_replicas):
     print("Creating cluster")
     
     instance_ids = []
@@ -189,7 +189,7 @@ def create_cluster(asg_name, num_replicas, redis_port):
     
     cmd = "/usr/local/bin/redis-trib.rb create --replicas " + str(num_replicas) + " "
     for instance_ip in instance_ips:
-        cmd = cmd + instance_ip + ":" + str(redis_port) + " "
+        cmd = cmd + instance_ip + ":" + str(REDIS_PORT) + " "
     cmd = cmd + " </tmp/yes"
     
     print("Command: " + cmd)
@@ -332,12 +332,9 @@ def handle_instance_termination(instance_id, lc_token):
             
             print "Master %s has the fewest slaves (%d)" % (master_with_fewest_slaves, fewest_slave_count)
             
-            if unused_master:
-                print "We have an unused master"
-                make_unused_master_into_slave(unused_master_ip, unused_master_port, master_with_fewest_slaves)                
-            else:
-                print "We don't have an unused master to assign"
-                sys.exit(1)
+            # Assign unused master as a slave to the master with the fewest slaves
+            make_unused_master_into_slave(unused_master_ip, unused_master_port, master_with_fewest_slaves)                
+
                 
     if 'slave' in node['flags'] and unused_master:        
         print "Instance is a slave and we have unused master"
@@ -407,7 +404,6 @@ def handle_message(message):
     lc_transition = body.get('LifecycleTransition')
     
     num_replicas  = body.get('NumReplicas')
-    redis_port    = body.get('RedisPort')
     
     if event == 'CLUSTER_FORGET':
         node_id = body.get('node_id')
@@ -421,7 +417,7 @@ def handle_message(message):
     
     if event == 'CLUSTER_CREATE':
         print("Received CLUSTER_CREATE")
-        create_cluster(asg_name, num_replicas, redis_port)
+        create_cluster(asg_name, num_replicas)
         delete_message(message)
     
     if lc_transition == 'autoscaling:EC2_INSTANCE_TERMINATING':
