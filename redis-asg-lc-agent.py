@@ -495,10 +495,6 @@ def is_leader():
 
 def main():
     
-    #if not is_leader():
-    #    print "Not leader... exiting"
-    #    sys.exit(0)
-    
     print("Performing cleanup")
     try:
         do_cleanup()
