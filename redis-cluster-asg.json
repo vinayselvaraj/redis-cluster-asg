@@ -206,6 +206,20 @@
       }
     },
     
+    "WaitHandle" : {
+      "Type" : "AWS::CloudFormation::WaitConditionHandle"
+    },
+    
+    "WaitCondition" : {
+      "Type" : "AWS::CloudFormation::WaitCondition",
+      "DependsOn" : "AutoScalingGroup",
+      "Properties" : {
+        "Handle"  : { "Ref" : "WaitHandle" },
+        "Timeout" : "1800",
+        "Count"   : "1"
+      }
+    },
+    
     "NotifyClusterCreateLambdaExecRole" : {
       "Type": "AWS::IAM::Role",
       "Properties": {
@@ -256,7 +270,7 @@
             "      if (sqsQueueUrl) {",
             "        var aws = require('aws-sdk');",
             "        var sqs = new aws.SQS({params: {QueueUrl: sqsQueueUrl}});",
-            "        var messageBody = {Event: 'CLUSTER_CREATE', NumReplicas: '", {"Ref" : "NumReplicas"} ,"', AutoScalingGroupName: '", {"Ref" : "AutoScalingGroup"} ,"'};",
+            "        var messageBody = {Event: 'CLUSTER_CREATE', WaitHandleUrl: '", {"Ref" : "WaitHandle"}  ,"', NumReplicas: '", {"Ref" : "NumReplicas"} ,"', AutoScalingGroupName: '", {"Ref" : "AutoScalingGroup"} ,"'};",
             "        sqs.sendMessage({MessageBody: JSON.stringify(messageBody)}, function (err, data) {",
             "          if (err) {",
             "            responseData = {Error: 'sendMessage call failed'};",

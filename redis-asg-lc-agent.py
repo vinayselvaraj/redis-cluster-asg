@@ -5,7 +5,8 @@ import json
 import os
 import subprocess
 import sys
-import urllib2
+import uuid
+import requests
 
 queue_url           = os.environ['SQS_QUEUE_URL']
 aws_region          = os.environ['AWS_REGION']
@@ -13,9 +14,7 @@ config_tablename    = os.environ['CONFIG_TABLE']
 
 REDIS_PORT          = 6379
 
-MY_INSTANCE_ID      = urllib2.urlopen(
-                        urllib2.Request('http://169.254.169.254/latest/meta-data/instance-id')
-                      ).read()
+MY_INSTANCE_ID      = requests.get('http://169.254.169.254/latest/meta-data/instance-id').text
 
 boto3.setup_default_session(region_name=aws_region)
 
@@ -393,6 +392,14 @@ def complete_lc_action(lc_hook, asg_name, lc_token, result, instance_id):
     )
     print "Completed lifecycle action"
 
+def complete_wait_handle(wait_handle_url):
+    payload = {
+        "Status": "SUCCESS",
+        "Reason": "Redis Cluster Created",
+        "UniqueId": str(uuid.uuid4()),
+        "Data": "Ready"
+    }
+    requests.put(wait_handle_url, data = json.dumps(payload))
 
 def handle_message(message):
     body = json.loads(message['Body'].encode("ascii"))
@@ -414,6 +421,8 @@ def handle_message(message):
     if event == 'CLUSTER_CREATE':
         print("Received CLUSTER_CREATE")
         create_cluster(asg_name, num_replicas)
+        wait_handle_url = body.get('WaitHandleUrl')
+        complete_wait_handle(wait_handle_url)
         delete_message(message)
     
     if lc_transition == 'autoscaling:EC2_INSTANCE_TERMINATING':
