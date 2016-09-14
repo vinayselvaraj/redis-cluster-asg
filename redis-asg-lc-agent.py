@@ -693,7 +693,7 @@ def main():
     try:
         rebalance_cluster()
     except Exception as e:
-        logger.exception("Caught exception while doing rebalance: ", e)
+        logger.exception("Caught exception while doing rebalance: %s", e)
     
     logger.info("Performing cleanup")
     try:
