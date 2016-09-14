@@ -466,7 +466,7 @@ def do_cleanup():
     
     # Check all nodes in the fail state
     for key, value in node_ipport_dict.iteritems():
-        print "%s = %s" % (key, value)
+        logger.info("%s = %s" % (key, value))
         if 'fail' in value['flags']:
             node = value
             logger.info("Failed node found: %s", node['id'])
