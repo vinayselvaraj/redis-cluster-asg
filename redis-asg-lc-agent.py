@@ -699,7 +699,7 @@ def main():
     try:
         do_cleanup()
     except Exception as e:
-        logger.exception("Caught exception while doing cleanup: ", e)
+        logger.exception("Caught exception while doing cleanup: %s", e)
     
     logger.info("Polling for messages")
     messages = sqs.receive_message(
